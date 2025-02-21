@@ -1,0 +1,456 @@
+---
+title: "Thyroid Carcinoma Final"
+author: "Rishitha Pulakhandam"
+date: "2023-12-01"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+Gene Expression Data Analysis and Visualization
+Final Project
+For a final project, you will be conducting an analysis pipeline in attempt to answer some questions about
+the data set being used. The data selected should include some sort of class structure with different levels
+(e.g. disease vs. normal, treated vs. non-treated, age<65 vs. age≥65, low dose vs. high dose vs. control etc.).
+Each project will include analysis of a publicly available data set from some expression database (e.g.,
+Stanford MicroArray Database, Gene Expression Omnibus, EMBL ArrayExpress). 
+
+**The Dataset is of the Thyroid Carcinoma - with samples of two dieases states, which are papillary thyroid Carcinoma and Anaplastic thyroid Carcinoma**
+Dataset-https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE55933
+```{r}
+#Download the Dataset of Thyroid Carcinoma
+data_rna <- read.table("/Users/rishithapulakhandam/Downloads/GSE55933_series_matrix.txt",header = TRUE,row.names = 1)
+head(data_rna)
+dim(data_rna)
+```
+
+**The coloumns are labelled based on the Sample state**
+```{r}
+# labeling the header of the dataset
+column_name <- colnames(data_rna)
+print(column_name)
+
+new_col_names <- character(length(column_name))
+
+for (i in 1:10) {
+  if (i <= 5) {
+    new_col_names[i] <- paste0(column_name[i], "_Papillary")
+  } else {
+    new_col_names[i] <- paste0(column_name[i], "_Anaplastic")
+  }
+}
+
+colnames(data_rna) <- new_col_names
+print(colnames(data_rna))
+```
+
+**A MA plot of the Original Data is plotted**
+```{r}
+#Plotting a MA plot of the Original data
+# Columns 1 to 5 are Papillary Thyroid Carcinoma samples, and columns 6 to 9 are Anaplastic Thyroid Carcinoma samples
+library(limma)
+# Calculate log2 fold change (M) and average expression (A)
+log2_fc <- rowMeans(data_rna[, 1:5]) - rowMeans(data_rna[, 6:10])
+average_expr <- (rowMeans(data_rna[, 1:5]) + rowMeans(data_rna[, 6:10])) / 2
+
+# Create MA plot
+plot(average_expr, log2_fc, main = "MA Plot (Original Data)", xlab = "A (Average Expression)", ylab = "M (Log2 Fold Change)")
+
+# Add a horizontal line at y = 0
+abline(h = 0, col = "red", lty = 2)
+```
+
+The student should first test for outlier samples and provide visual proof. Remove these outliers. 
+
+**The data subjected various forms of Normalization such as Quantile Normalization ,Scale Normalization, Global Normalization.**
+```{r}
+library(limma)
+#Sample wise normalization
+#Quantile Normalization
+normalized_data_median <- normalizeQuantiles(data_rna)
+
+#Columns 1 to 5 are Papillary Thyroid Carcinoma samples and columns 6 to 9 are Anaplastic Thyroid Carcinoma samples
+
+# Calculate log-fold change (M)
+log_fold_change <- rowMeans(normalized_data_median[, 1:5]) - rowMeans(normalized_data_median[, 6:10])
+
+# Calculate average expression (A)
+average_expression <- rowMeans(normalized_data_median[, 1:10])
+
+# Create a data frame for plotting
+plot_data <- data.frame(M = log_fold_change, A = average_expression)
+
+# Plotting
+library(ggplot2)
+
+# plot_data contains columns A and M
+ggplot(plot_data, aes(x = A, y = M)) +
+  geom_point(shape = 1, size = 3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "MA Plot of Quantile Normalization ", x = "Average Expression (A)", y = "Log-Fold Change (M)") +
+  theme(plot.title = element_text(hjust = 0.5))  # Center align the title
+# Scale normalization
+library(limma)
+normalized_data_scale <- scale(data_rna)
+
+
+# Columns 1 to 5 are Papillary Thyroid Carcinoma samples, and columns 6 to 10 are Anaplastic Thyroid Carcinoma samples
+
+# Calculate log2 fold change (M) and average expression (A)
+log2_fc <- rowMeans(normalized_data_scale[, 1:5]) - rowMeans(normalized_data_scale[, (ncol(normalized_data_scale)-4):ncol(normalized_data_scale)])
+average_expr <- (rowMeans(normalized_data_scale[, 1:5]) + rowMeans(normalized_data_scale[, (ncol(normalized_data_scale)-4):ncol(normalized_data_scale)])) / 2
+
+# Create MA plot
+plot(average_expr, log2_fc, main = "MA Plot (Normalized and Scaled Data)", xlab = "A (Average Expression)", ylab = "M (Log2 Fold Change)")
+
+# Add a horizontal line at y = 0
+abline(h = 0, col = "red", lty = 2)
+```
+```{r}
+#Global Normalization
+library(limma)
+global_normalized_data <- normalizeBetweenArrays(as.matrix(data_rna))
+
+# Calculate log2 fold change (M) and average expression (A)
+log2_fc <- rowMeans(global_normalized_data[, 1:5]) - rowMeans(global_normalized_data[, 6:10])
+average_ex <- rowMeans(cbind(global_normalized_data[, 1:5], global_normalized_data[, 6:10]))
+
+# Create MA plot
+plot(average_ex, log2_fc, main = "MA Plot for Global Normalized Data", 
+     xlab = "A (Average Expression)", ylab = "M (Log2 Fold Change)")
+
+# Add a horizontal line at y = 0
+abline(h = 0, col = "red", lty = 2)
+```
+
+
+**Data is checked for NA values.**
+```{r}
+#imputation
+#check for NA
+missing_values <- any(is.na(normalized_data_median))
+missing_values
+# omitting NA values
+data_rna <- na.omit(normalized_data_median)
+```
+
+**Various Visualizations are done to identify Outliners.**
+```{r}
+# Visualizing to check for outliners
+# CORRELATION PLOT
+library(corrplot)
+correlation_matrix <- cor(normalized_data_median) 
+corrplot(correlation_matrix, method = "color",
+title = "Correlation Plot for Thyroid Carcinoma", tl.cex = 0.7,
+cl.cex = 0.8,
+addrect = 2,
+rect.col = "black", mar = c(1, 1, 1, 1))
+
+#DENDROGRAM
+data_rna_t <- t(normalized_data_median)
+data.dist <- dist(data_rna_t,method="euclidean")
+data.clust <- hclust(data.dist,method = "single")
+plot(data.clust,main = "Hierarchical Clustering Dendrogram for Thyroid Carcinoma", xlab = "Samples", ylab = "Distance",labels=new_col_names,cex=0.75)
+
+#AVERAGE CORRELATION PLOT
+dat.avg <- apply(correlation_matrix, 1, mean) 
+par(oma = c(3, 0.1, 0.1, 0.1))
+plot(c(1, length(dat.avg)), range(dat.avg), type = "n", xlab = "", ylab = "Average", main = "Avg correlation plot of Thyroid Carcinoma", axes = F)
+points(dat.avg, bg = "purple", col = 1, pch = 21, cex = 1.25) 
+axis(1, at = c(1:length(dat.avg)), labels = dimnames(normalized_data_median)[[2]], las = 2, cex.lab = 0.4, cex.axis = 0.6)
+axis(2) 
+abline(v = seq(0.5, 62.5, 1), col = "grey")
+
+```
+
+**Samples "GSM1348740_Anaplastic" and "GSM1348738_Anaplastic" are identified as Outliners.**
+
+```{r}
+# Removing the Outliners
+data_rna_no_outliners <- subset (data_rna, select = -c(GSM1348740_Anaplastic,GSM1348738_Anaplastic))
+dim(data_rna_no_outliners)
+head(data_rna_no_outliners)
+```
+
+**Quantile Normalization is performed after removing the outliners.**
+```{r}
+#Normalizing after removing Outliners
+#Quantile Normalization
+normalized_data_rna <- normalizeQuantiles(data_rna_no_outliners)
+
+# columns 1 to 5 are Papillary Thyroid Carcinoma samples and columns 6 to 9 are Anaplastic Thyroid Carcinoma samples
+
+# Calculate log-fold change (M)
+log_fold_change <- rowMeans(data_rna_no_outliners[, 1:5])- rowMeans(data_rna_no_outliners[, 6:8])
+
+# Calculate average expression (A)
+avg_expression <- rowMeans(data_rna_no_outliners[, 1:8])
+
+# Create a data frame for plotting
+plot_MA_data <- data.frame(M = log_fold_change, A = avg_expression)
+
+# Plotting
+library(ggplot2)
+
+ggplot(plot_MA_data, aes(x = A, y = M)) +
+  geom_point(shape = 1, size = 3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "MA Plot of Quantile Normalization after Removing Outliers",
+       x = "Average Expression (A)", y = "Log-Fold Change (M)") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+
+Then, filter out genes that have low expression values using some criterion.
+
+```{r}
+# Removing genes under the 25th quatile,Removing low-expressed genes can help reduce the dimensionality of the dataset, making it more computationally efficient and improving the interpretability of results.
+
+data_rna <- apply(normalized_data_rna, 1, var)
+head((data_rna),30)
+# Determine the threshold as the top 75% of variances
+threshold <- quantile(data_rna, 0.25)  # Replace 'variance_values' with your actual variance values
+
+# Filter genes with variances above the threshold
+filtered_genes <- data_rna[data_rna >= threshold]
+length(filtered_genes)
+head((names(filtered_genes)),10)
+genes_above_threshold <- names(filtered_genes)
+filtered_data <- normalized_data_rna[genes_above_threshold,]
+dim(filtered_data)
+```
+
+
+Next, conduct some method of feature selection with a statistical test or other machine learning method. The type of test will depend upon how many factor levels are included in your data set. For example. two conditions would require a two-sample test, while greater
+than two conditions would require other tests. Adjust for multiplicity, then provide the number of genes
+retained with the associated score (p-value, weight, test statistic, etc.) and threshold value that you used.
+
+**A Student t-test is done for the Feature Analysis.**
+```{r}
+#Student t-test
+log2_carcinoma_data <- log2(filtered_data)
+t.test.all.genes <- function(x,s1,s2) {
+  x1 <- x[s1]
+  x2 <- x[s2]
+  x1 <- as.numeric(x1)
+  x2 <- as.numeric(x2)
+  t.out <- t.test(x1,x2, alternative="two.sided",var.equal=T)
+  out <- as.numeric(t.out$p.value)
+  return(out)
+}
+pv <- apply(log2_carcinoma_data,1,t.test.all.genes,s1=1:5,s2=6:8)
+
+adjusted_p_values <- p.adjust(pv, method = "BH")
+threshold <- 0.05
+significant_genes <- (adjusted_p_values <= threshold)
+sum(significant_genes)
+```
+**1902 Significant genes are found**
+
+Plot the scores of those genes retained in a histogram. 
+```{r}
+# Histogram
+hist(adjusted_p_values[significant_genes], breaks = 30, xlab = "Adjusted P-values", main = "Histogram of Adjusted P-values for Significant Genes")
+```
+
+
+Next, subset your data by the genes that you determined
+```{r}
+# Subset significant genes to a new dataset
+significant_genes_data <- log2_carcinoma_data[significant_genes, , drop = FALSE]
+
+# The new dataset of significant genes
+head(significant_genes_data)
+
+```
+
+and use one of the clustering or dimensionality reduction methods discussed in class to
+visualize the samples in two-dimensional space (xy scatter plot, dendrogram, etc.).
+Using these linear projections of the original data (i.e. cluster centroids, latent variables, etc.), use a
+classification method to classify the samples into their respective classes. Make sure to color the samples
+appropriately by their predicted class membership and use different symbols for the actual class
+memberships.
+**Confirmational Analysis**
+```{r}
+# Perform PCA for dimensionality reduction
+pca_result <- prcomp(t(significant_genes_data))  # Transpose data for samples as rows
+pca_scores <- pca_result$x
+
+# Plot PCA scores with color based on sample groups
+# Define sample group vector
+num_papillary_samples <- 5  # Number of papillary thyroid Carcinoma samples
+num_anaplastic_samples <- 8 - num_papillary_samples  # Number of anaplastic thyroid Carcinoma samples
+sample_groups <- factor(c(rep("Papillary Thyroid Cancer", num_papillary_samples), rep("Anaplastic Thyroid cancer", num_anaplastic_samples)))
+
+library(ggplot2)
+
+# Combine PCA scores and sample groups into a data frame
+pca_data <- cbind.data.frame(pca_scores, Sample_Group = sample_groups)
+
+# Create a PCA plot with ggplot2
+# Plot PCA scores with color based on sample groups
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Sample_Group)) +
+  geom_point(size = 3) +
+  labs(x = "Principal Component 1", y = "Principal Component 2") +
+  ggtitle("PCA: Samples in 2D Space") +
+  theme_minimal() +
+  scale_color_manual(values = c("black", "red")) +
+  theme(legend.position = "right",  # Keep legend on the right
+        plot.title = element_text(hjust = 0.5)) +
+  guides(color = guide_legend(title = "Sample Groups"))
+```
+**KNN Classification is performed**
+```{r}
+set.seed(100)
+library(class)
+library(ggplot2)
+
+error_list <- NULL
+
+# Loop through different values of k (neighbors)
+for (i in 1:8) {
+  # Perform k-NN classification
+  dat_knn <- knn(t(significant_genes_data), t(significant_genes_data), sample_groups, k = i, prob = TRUE)
+
+  # Calculate error rate
+  er_total <- sum(dat_knn != sample_groups) / length(sample_groups) * 100  # Total error rate
+
+  # Store error rate in the list
+  error_list <- c(error_list, round(er_total, 1))
+}
+
+# Create a data frame for ggplot
+k_values <- 1:8
+error_df <- data.frame(k = k_values, error_rate = error_list)
+
+# Plot classification error vs. k using ggplot
+ggplot(error_df, aes(x = k, y = error_rate)) +
+  geom_line(color = "blue") +
+  geom_point(color = "blue") +
+  labs(x = "Number of k", y = "% Error in Classification") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 10), axis.title = element_text(size = 12),
+        plot.title = element_text(hjust = 0.5)) +
+  ggtitle("KNN-Error vs. Number of k")
+
+```
+
+**The K value is taken as 3.**
+```{r}
+# selected_genes_data is a dataset with selected genes
+# Perform PCA for dimensionality reduction
+pca_result <- prcomp(t(significant_genes_data))
+pca_scores <- pca_result$x
+
+# Use k-NN for classification (you can choose other classifiers)
+# K value is taken as 3
+library(class)
+k <- 3
+knn_model <- knn(pca_scores, pca_scores, cl = sample_groups, k = k)
+predicted_classes <- knn_model
+
+# Visualize results
+library(ggplot2)
+results_data <- cbind.data.frame(pca_scores, Actual_Class = sample_groups, Predicted_Class = predicted_classes)
+
+# Visualize results with red triangle for Papillary and black square for Anaplastic
+ggplot(results_data, aes(x = PC1, y = PC2, color = Actual_Class, shape = Predicted_Class)) +
+  geom_point(size = 3) +
+  labs(x = "Principal Component 1", y = "Principal Component 2") +
+  ggtitle("PCA: Samples in 2D Space with Classification K=3") +
+  theme_minimal() +
+  scale_color_manual(values = c("black", "red")) +
+  scale_shape_manual(values = c(17, 18)) +  # 16 for square (Anaplastic), 17 for triangle (Papillary)
+  theme(legend.position = "right") +
+  guides(color = guide_legend(title = "Actual Classes"), shape = guide_legend(title = "Predicted Classes"))
+
+```
+
+**My Sample groups are well separated so when the k value is set as 7 there is a change in graph, the k=7 was not taken as the error rate increases and overfits the data.**
+
+**The K value is taken as 7**
+```{r}
+# selected_genes_data is a dataset with selected genes
+# Perform PCA for dimensionality reduction
+pca_result <- prcomp(t(significant_genes_data))
+pca_scores <- pca_result$x
+
+# Use k-NN for classification (you can choose other classifiers)
+#K value is taken as 7
+library(class)
+k <- 7
+knn_model <- knn(pca_scores, pca_scores, cl = sample_groups, k = k)
+predicted_classes <- knn_model
+
+# Visualize results
+library(ggplot2)
+results_data <- cbind.data.frame(pca_scores, Actual_Class = sample_groups, Predicted_Class = predicted_classes)
+
+# Visualize results with red triangle for Papillary and black square for Anaplastic
+ggplot(results_data, aes(x = PC1, y = PC2, color = Actual_Class, shape = Predicted_Class)) +
+  geom_point(size = 3) +
+  labs(x = "Principal Component 1", y = "Principal Component 2") +
+  ggtitle("PCA: Samples in 2D Space with Classification K=7") +
+  theme_minimal() +
+  scale_color_manual(values = c("black", "red")) +
+  scale_shape_manual(values = c(17, 18)) +  # 16 for square (Anaplastic), 17 for triangle (Papillary)
+  theme(legend.position = "right") +
+  guides(color = guide_legend(title = "Actual Classes"), shape = guide_legend(title = "Predicted Classes"))
+```
+  
+  
+  
+Finally, using the top 5 discriminant genes (positive and negative direction) from your analysis, go to
+NCBI’s DAVID and look up the gene information. Provide the gene name and functional information
+(associated pathways, GO terms, etc) for these 10 genes.
+
+**The top discriminant genes are found.**
+```{r}
+# Top 5 discriminant genes
+ann.dat2<-colnames(significant_genes_data)
+ann.dat2 <- ifelse(grepl("_Papillary", ann.dat2), 0, 1)
+ann.dat2 <- as.factor(ann.dat2)
+library(limma)
+
+design_matrix <- model.matrix(~ann.dat2)
+fit <- lmFit(significant_genes_data, design_matrix)
+fit_ebayes <- eBayes(fit)
+genes<- topTable(fit_ebayes, coef = "ann.dat21", sort.by = "t")
+#Positive Direction
+top_positive_genes <- genes[order(abs(genes$t)), ][1:5, ]
+#Negative Direction
+top_negative_genes <- genes[order(-abs(genes$t)), ][1:5, ]
+
+print(top_positive_genes)
+print(top_negative_genes)
+
+```
+**Identifying genes that are differentially expressed without necessarily distinguishing between upregulation and downregulation, thats why I have taken the absolute values.The Data set has samples from papillary thyroid carcinoma and Anaplastic Thyroid carcinoma, the paper tried to record the Papillary Thyroid Carcinoma evolving into a Anaplastic Thyroid Carcinoma.**
+
+**The Gene Symbol and Gene Description is found.**
+```{r}
+# Top Positive Genes
+top_positive_genes_table <- data.frame(
+  GENE_ID = c(10513256, 10514340, 10473312, 10448016, 10501164),
+  GENE_SYMBOL = c("PTT_12697", "PTT_18434", "PSEBR_a4163", "parB", "DICPUDRAFT_97663"),
+  GENE_DESCRIPTION = c("Hypothetical protein", "Hypothetical protein", "Sulfate ABC transporter periplasmic protein", "ParB family chromosome partitioning protein", "Uncharacterized protein")
+)
+
+# Top Negative Genes
+top_negative_genes_table <- data.frame(
+  GENE_ID = c(10554156, 10468992, 10462702, 10506680, 10456071),
+  GENE_SYMBOL = c("wtpA", "PSEBR_a159", "istA", "DICPUDRAFT_148547", "MDS_1287"),
+  GENE_DESCRIPTION = c("Tungstate ABC transporter substrate-binding protein WtpA", "Hypothetical protein", "IS21 family transposase", "Uncharacterized protein", "Alpha/beta fold family hydrolase-like protein")
+)
+
+# Print tables
+print("\nTop Positive Genes:\n")
+print(top_positive_genes_table)
+
+print("\nTop Negative Genes:\n")
+print(top_negative_genes_table)
+
+
+```
+
+
